@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TierMath - is the chase worth it?</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#131218; color:#eeecf4; min-height:100vh; }
+  .wrap { max-width:860px; margin:0 auto; padding:28px 20px 80px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+  header h1 { font-size:22px; } header h1 span { color:#f2c14e; }
+  header a { color:#948da0; text-decoration:none; font-size:14px; }
+  .card { background:#1b1924; border:1px solid #3d3548; border-radius:12px; padding:18px; margin-bottom:18px; }
+  label { font-size:12px; color:#948da0; display:block; margin-bottom:4px; }
+  input { background:#131218; border:1px solid #4a4258; border-radius:8px; color:#eeecf4; padding:9px 10px; font-size:14px; width:100%; }
+  button { background:#f2c14e; border:none; color:#2a1d05; font-weight:700; padding:11px 22px; border-radius:9px; font-size:14px; cursor:pointer; }
+  .row4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:12px; }
+  h3 { font-size:14px; color:#c4bdcf; margin-bottom:10px; }
+  .verdict { background:#221c10; border:1px solid #4d4122; border-radius:10px; padding:14px 16px; margin-bottom:14px; font-size:15px; line-height:1.6; }
+  .verdict b { color:#f2c14e; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .stat { background:#131218; border:1px solid #3d3548; border-radius:10px; padding:12px; }
+  .stat .v { font-size:20px; font-weight:700; color:#fff; }
+  .stat .k { font-size:11px; color:#948da0; margin-top:2px; line-height:1.4; }
+  .err { color:#ff8a8a; font-size:13px; margin-top:8px; }
+  .note { color:#6b6578; font-size:12px; margin-top:10px; }
+  .win { color:#7ed99a; } .lose { color:#ff9a9a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Tier<span>Math</span></h1><a href="index.html">home</a></header>
+
+  <div class="card">
+    <h3>The chase</h3>
+    <div class="row4">
+      <div><label>Nights so far this year</label><input id="cur" type="number" value="45"></div>
+      <div><label>Tier threshold (nights)</label><input id="thr" type="number" value="50"></div>
+      <div><label>Loyalty tax ($/night over best price)</label><input id="tax" type="number" value="20"></div>
+      <div><label>Mattress-run nights (slept nowhere)</label><input id="mr" type="number" value="0"></div>
+    </div>
+    <div class="row4">
+      <div><label>Avg nightly rate ($)</label><input id="rate" type="number" value="150"></div>
+      <div><label>Status lasts (years)</label><input id="yrs" type="number" step="0.5" value="1"></div>
+      <div></div><div></div>
+    </div>
+    <h3>The perks (value per night, $)</h3>
+    <div class="row4">
+      <div><label>Lounge</label><input id="lounge" type="number" value="25"></div>
+      <div><label>Upgrades</label><input id="upgrade" type="number" value="30"></div>
+      <div><label>Breakfast</label><input id="bf" type="number" value="15"></div>
+      <div><label>Points earned</label><input id="pts" type="number" value="12"></div>
+    </div>
+    <div class="row4">
+      <div><label>Nights you will use status, per year</label><input id="bn" type="number" value="40"></div>
+      <div></div><div></div>
+      <div><label>&nbsp;</label><button id="go">Price it</button></div>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="out"></div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const IDS = ['cur','thr','tax','mr','rate','yrs','lounge','upgrade','bf','pts','bn'];
+  function usd(x){ return '$' + Math.round(Math.abs(x)).toLocaleString('en-US'); }
+
+  function calc(){
+    $('err').textContent = '';
+    const st = {};
+    IDS.forEach(function(id){ st[id] = $(id).value; });
+    try { localStorage.setItem('tiermath', JSON.stringify(st)); } catch(e) {}
+    let r;
+    try {
+      r = TierMathEngine.chase({ currentNights: st.cur, threshold: st.thr, taxPerNight: st.tax,
+        mattressNights: st.mr, avgRate: st.rate, statusYears: st.yrs, benefitNights: st.bn,
+        benefits: { lounge: st.lounge, upgrade: st.upgrade, breakfast: st.bf, points: st.pts } });
+    } catch(e) { $('err').textContent = e.message; $('out').innerHTML = ''; return; }
+
+    let v;
+    if (r.nightsNeeded === 0) {
+      v = 'You are already there - the status costs nothing more. Enjoy the <b>' + usd(r.benefitValue) + '</b> of perks.';
+    } else if (r.worthIt) {
+      v = '<b>Worth it.</b> The chase costs ' + usd(r.earnCost) + ' (' + r.nightsNeeded + ' nights to go) and the perks return ' + usd(r.benefitValue)
+        + ' over ' + st.yrs + ' year' + (st.yrs > 1 ? 's' : '') + ' - a net win of <b>' + usd(r.net) + '</b>.';
+    } else {
+      v = '<b>Skip it.</b> The chase costs ' + usd(r.earnCost) + ' and the perks return only ' + usd(r.benefitValue)
+        + ' - you are ' + usd(r.net) + ' in the hole.'
+        + (r.breakEvenBenefitPerNight !== null ? ' Perks would need to be worth <b>$' + r.breakEvenBenefitPerNight + '/night</b> to break even; you put $' + r.perNightBenefit + '.' : ' And you said you will barely use it.');
+    }
+
+    $('out').innerHTML = '<div class="verdict">' + v + '</div><div class="card"><div class="stats">'
+      + '<div class="stat"><div class="v">' + r.nightsNeeded + '</div><div class="k">nights to go</div></div>'
+      + '<div class="stat"><div class="v">' + usd(r.earnCost) + '</div><div class="k">cost of the chase</div></div>'
+      + '<div class="stat"><div class="v">$' + r.perNightBenefit + '</div><div class="k">perk value per night</div></div>'
+      + '<div class="stat"><div class="v">' + usd(r.benefitValue) + '</div><div class="k">perk value over status life</div></div>'
+      + '<div class="stat"><div class="v ' + (r.net >= 0 ? 'win' : 'lose') + '">' + (r.net >= 0 ? '+' : '-') + usd(r.net) + '</div><div class="k">net</div></div>'
+      + '<div class="stat"><div class="v">' + (r.breakEvenBenefitPerNight !== null ? '$' + r.breakEvenBenefitPerNight : '-') + '</div><div class="k">break-even perk per night</div></div>'
+      + '</div><div class="note">Cost = loyalty premium on the nights you need + full price of mattress-run nights. Perks valued only on nights you will actually stay.</div></div>';
+  }
+
+  $('go').onclick = calc;
+  document.querySelectorAll('input').forEach(function(el){ el.addEventListener('input', calc); });
+  try {
+    const st = JSON.parse(localStorage.getItem('tiermath') || 'null');
+    if (st) IDS.forEach(function(id){ if (st[id] !== undefined) $(id).value = st[id]; });
+  } catch(e) {}
+  calc();
+})();
+</script>
+</body>
+</html>
